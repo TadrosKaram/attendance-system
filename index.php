@@ -6,17 +6,17 @@ require_once 'connection.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['selected_date'])) {
     $date = $_POST['selected_date'];
 
-    
+
     $stmt = $conn->prepare("INSERT IGNORE INTO attendance_days (date) VALUES (?)");
     $stmt->bind_param("s", $date);
     $stmt->execute();
 
-    
+
     $res = mysqli_query($conn, "SELECT id FROM attendance_days WHERE date = '$date'");
     $row = mysqli_fetch_assoc($res);
     $day_id = $row['id'];
 
-    
+
     $users = mysqli_query($conn, "SELECT id FROM afrad");
     while ($user = mysqli_fetch_assoc($users)) {
         $user_id = $user['id'];
@@ -57,14 +57,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Reset all to absent
     mysqli_query($conn, "UPDATE attendance_records SET attended = '0', excuse = NULL WHERE day_id = $day_id");
 
-    // Update attended users
+    // Mark attended users
     if (isset($_POST['attended'])) {
         foreach ($_POST['attended'] as $user_id => $val) {
-            $user_id = (int)$user_id;
-            $excuse = isset($_POST['excuse'][$user_id]) ? mysqli_real_escape_string($conn, $_POST['excuse'][$user_id]) : NULL;
+            $user_id = (int) $user_id;
+            mysqli_query($conn, "UPDATE attendance_records SET attended = '1' WHERE user_id = $user_id AND day_id = $day_id");
+        }
+    }
+
+    // Save excuses for all users
+    if (isset($_POST['excuse'])) {
+        foreach ($_POST['excuse'] as $user_id => $excuse) {
+            $user_id = (int) $user_id;
+            $excuse = mysqli_real_escape_string($conn, trim($excuse));
             mysqli_query($conn, "
-                UPDATE attendance_records 
-                SET attended = '1', excuse = " . ($excuse ? "'$excuse'" : "NULL") . "
+                UPDATE attendance_records
+                SET excuse = " . ($excuse !== '' ? "'$excuse'" : "NULL") . "
                 WHERE user_id = $user_id AND day_id = $day_id
             ");
         }
@@ -75,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch attendance records for that day
 $query = "
-SELECT af.id, af.name, af.phone, af.address, ar.attended, ar.excuse 
+SELECT af.id, af.name, af.phone, af.address, ar.attended, ar.excuse
 FROM attendance_records ar
 JOIN afrad af ON af.id = ar.user_id
 WHERE ar.day_id = $day_id
@@ -101,7 +109,6 @@ $result = mysqli_query($conn, $query);
     </style>
 </head>
 <body>
-
 
 
 <h1>افراد</h1>
@@ -142,9 +149,8 @@ $result = mysqli_query($conn, $query);
 
 <div class="logout">
     <a href="logout.php" style="text-decoration:none; color: #fff; background-color: #f44336; padding: 10px 20px; border-radius: 5px;">logout (for testing only)</a>
-
 <script>
-    const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    const checkboxes = document.querySelectorAll('input[type=\"checkbox\"]');
     checkboxes.forEach(checkbox => {
         // Set initial background on page load
         if (checkbox.checked) {
